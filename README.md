@@ -34,7 +34,14 @@ git clone https://github.com/joseto1298/Klipper-Spoolman-Sync.git
 cd Klipper-Spoolman-Sync
 ```
 
-### 2. Configuración (`config.ini`)
+### 2. Crea y activa el entorno virtual e instala dependencias:
+```ini
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+### 3. Configuración (`config.ini`)
 
 Edita el archivo `config.ini` para que coincida con tu configuración local:
 
@@ -55,7 +62,7 @@ MOONRAKER_BASE_URL = http://<IP_MOONRAKER>:<PUERTO>/
 | `[Klipper]` | `GCODE_PATH` | Ruta absoluta donde Klipper guarda los archivos G-code. |
 | `[Moonraker]` | `MOONRAKER_BASE_URL` | URL base de la API de Moonraker. **Asegúrate de que termina en `/`**. |
 
-### 3. Macros de Klipper (`klipper_macros.cfg`)
+### 4. Macros de Klipper (`klipper_macros.cfg`)
 
 Copia el contenido del archivo `klipper_macros.cfg` y añádelo a tu archivo de configuración de Klipper (por ejemplo, `printer.cfg`).
 
@@ -67,7 +74,7 @@ Este archivo contiene las siguientes macros:
 | `CHECK_FILAMENT_LIST` | Macro que ejecuta `filamentList.py` para analizar el G-code y obtener la secuencia de filamentos. |
 | `FILAMENT_CHANGE_NOTICE` | Macro que ejecuta `filamentNotice.py` para consultar Spoolman y notificar a Klipper. |
 
-### 4. Integración con el Slicer
+### 5. Integración con el Slicer
 
 Para que el sistema funcione, debes añadir un comando de cambio de filamento en tu *slicer* (por ejemplo, PrusaSlicer o Cura) que incluya el ID del filamento de Spoolman.
 
@@ -81,6 +88,20 @@ ASSERT_ACTIVE_FILAMENT ID=<ID_DE_SPOOLMAN>
 
 ```gcode
 ASSERT_ACTIVE_FILAMENT ID=123
+```
+### 6. Integración con moonraker
+
+Añadir en el fichero moonraker.conf
+
+```ini
+[update_manager Klipper-Spoolman-Sync]
+type: git_repo
+primary_branch: main
+path: /home/pi/Klipper-Spoolman-Sync
+origin: https://github.com/joseto1298/Klipper-Spoolman-Sync.git
+virtualenv: /home/pi/Klipper-Spoolman-Sync/venv
+requirements: /home/pi/Klipper-Spoolman-Sync/requirements.txt
+managed_services: klipper
 ```
 
 ## Uso
