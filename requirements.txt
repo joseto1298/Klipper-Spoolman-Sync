@@ -1,0 +1,3 @@
+# Fichero requirements.txt
+requests
+configparser
