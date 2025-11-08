@@ -62,7 +62,7 @@ MOONRAKER_BASE_URL = http://<IP_MOONRAKER>:<PUERTO>/
 | `[Klipper]` | `GCODE_PATH` | Ruta absoluta donde Klipper guarda los archivos G-code. |
 | `[Moonraker]` | `MOONRAKER_BASE_URL` | URL base de la API de Moonraker. **Asegúrate de que termina en `/`**. |
 
-### 4. Macros de Klipper (`klipper_macros.cfg`)
+### 4. Macros de Klipper y shell_command (`klipper_macros-shell_command.cfg`)
 
 Copia el contenido del archivo `klipper_macros.cfg` y añádelo a tu archivo de configuración de Klipper (por ejemplo, `printer.cfg`).
 
