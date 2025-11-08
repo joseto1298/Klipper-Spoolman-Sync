@@ -27,7 +27,7 @@ pip install -r requirements.txt
 
 ### 1. Clonar el Repositorio
 
-Clona este repositorio en tu máquina Klipper (por ejemplo, en `/home/pi/klipper_config/`):
+Clona este repositorio en tu máquina Klipper (por ejemplo, en `/home/pi/`):
 
 ```bash
 git clone https://github.com/joseto1298/Klipper-Spoolman-Sync.git
@@ -106,29 +106,30 @@ managed_services: klipper
 
 ## Uso
 
-### 1. Analizar la Secuencia de Filamentos
+### 1. Mostrar la Secuencia de Filamentos
 
-Antes de imprimir, puedes usar la macro `CHECK_FILAMENT_LIST` para ver la secuencia de filamentos que se utilizarán en el trabajo de impresión:
+Añádir la macro `_FILAMENT_LIST`en g-code de incio para ver la secuencia de filamentos que se utilizarán en el trabajo de impresión:
 
 ```gcode
-CHECK_FILAMENT_LIST FILENAME=<nombre_del_archivo.gcode>
+_FILAMENT_LIST 
 ```
 
 El script `filamentList.py` analizará el G-code y mostrará en la consola de Klipper la lista de filamentos requeridos, consultando sus nombres y materiales en Spoolman.
 
+
 ### 2. Notificar un Cambio de Filamento
 
-Cuando Klipper necesite cambiar de filamento (por ejemplo, al inicio de la impresión o en un `M600`), debes llamar a la macro `FILAMENT_CHANGE_NOTICE` con el ID del filamento:
+Cuando Klipper necesite cambiar de filamento (por ejemplo, al inicio de la impresión o en un `M600`), debes llamar a la shell_command `FILAMENT_NOTICE` con el ID del filamento:
 
 ```gcode
-FILAMENT_CHANGE_NOTICE ID=<ID_DE_SPOOLMAN>
+RUN_SHELL_COMMAND CMD=FILAMENT_NOTICE PARAMS="{id}"
 ```
 
 Esta macro ejecutará `filamentNotice.py`, que:
 1.  Consulta Spoolman para obtener el nombre y material del filamento.
-2.  Llama a la macro `FILAMENT_INFO` en Klipper con los datos obtenidos.
+2.  Llama a la macro `_FILAMENT_INFO` en Klipper con los datos obtenidos.
 
-**Nota:** La macro `FILAMENT_INFO` es el punto de entrada para tus acciones personalizadas.
+**Nota:** Se pueden usar ambos sistemas o uno solo depedendiendo de las necesidades.
 
 ## Estructura del Proyecto
 
@@ -138,7 +139,7 @@ Esta macro ejecutará `filamentNotice.py`, que:
 | `requirements.txt` | Dependencias de Python (`requests`, `configparser`). |
 | `filamentList.py` | Script para analizar un archivo G-code y listar la secuencia de filamentos requeridos. |
 | `filamentNotice.py` | Script para consultar Spoolman y enviar la información del filamento a Klipper a través de Moonraker. |
-| `klipper_macros.cfg` | Macros de Klipper (`FILAMENT_INFO`, `CHECK_FILAMENT_LIST`, `FILAMENT_CHANGE_NOTICE`) para la integración. |
+| `klipper_macros-shell_command.cfg` | Macros de Klipper (`_FILAMENT_LIST`, `_FILAMENT_INFO`) y shell_command (`FILAMENT_LIST`, `FILAMENT_NOTICE` ) para la integración. |
 
 ## Contribución
 
