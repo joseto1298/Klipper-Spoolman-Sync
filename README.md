@@ -70,9 +70,13 @@ Este archivo contiene las siguientes macros:
 
 | Macro | Descripción |
 | :--- | :--- |
-| `FILAMENT_INFO` | Macro que recibe la información del filamento (ID, Nombre, Material) desde `filamentNotice.py`. **Aquí es donde puedes añadir lógica personalizada**, como enviar notificaciones a Telegram o Discord, o actualizar una pantalla. |
-| `CHECK_FILAMENT_LIST` | Macro que ejecuta `filamentList.py` para analizar el G-code y obtener la secuencia de filamentos. |
-| `FILAMENT_CHANGE_NOTICE` | Macro que ejecuta `filamentNotice.py` para consultar Spoolman y notificar a Klipper. |
+| `_FILAMENT_INFO` | Macro que recibe la información del filamento (ID, Nombre, Material) desde `filamentNotice.py`. **Aquí es donde puedes añadir lógica personalizada**, como enviar notificaciones a Telegram o Discord, o actualizar una pantalla. |
+| `_FILAMENT_LIST` | Macro que ejecuta el shell_command `FILAMENT_LIST` mandado los datos necesarios. |
+
+| shell_command | Descripción |
+| :--- | :--- |
+| `FILAMENT_LIST` | Ejecuta el script filamentList.py para analizar el G-code en busca de IDs de filamento. |
+| `FILAMENT_NOTICE` | Ejecuta el script filamentNotice.py para consultar un ID de filamento y enviar la info a Klipper. |
 
 ### 5. Integración con el Slicer
 
@@ -139,7 +143,7 @@ Esta macro ejecutará `filamentNotice.py`, que:
 | `requirements.txt` | Dependencias de Python (`requests`, `configparser`). |
 | `filamentList.py` | Script para analizar un archivo G-code y listar la secuencia de filamentos requeridos. |
 | `filamentNotice.py` | Script para consultar Spoolman y enviar la información del filamento a Klipper a través de Moonraker. |
-| `klipper_macros-shell_command.cfg` | Macros de Klipper (`_FILAMENT_LIST`, `_FILAMENT_INFO`) y shell_command (`FILAMENT_LIST`, `FILAMENT_NOTICE` ) para la integración. |
+| `klipper_macros-shell_command.cfg` | Macros de Klipper (`_FILAMENT_LIST`, `_FILAMENT_INFO`) y shell_command (`FILAMENT_LIST`, `FILAMENT_NOTICE`) para la integración. |
 
 ## Contribución
 
