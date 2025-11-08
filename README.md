@@ -112,7 +112,7 @@ managed_services: klipper
 
 ### 1. Mostrar la Secuencia de Filamentos
 
-Añádir la macro `_FILAMENT_LIST`en g-code de incio para ver la secuencia de filamentos que se utilizarán en el trabajo de impresión:
+Añádir la macro `_FILAMENT_LIST`en el g-code de incio para ver la secuencia de filamentos que se utilizarán en el trabajo de impresión:
 
 ```gcode
 _FILAMENT_LIST 
@@ -123,13 +123,13 @@ El script `filamentList.py` analizará el G-code y mostrará en la consola de Kl
 
 ### 2. Notificar un Cambio de Filamento
 
-Cuando Klipper necesite cambiar de filamento (por ejemplo, al inicio de la impresión o en un `M600`), debes llamar a la shell_command `FILAMENT_NOTICE` con el ID del filamento:
+Cuando Klipper necesite cambiar de filamento (por ejemplo, `M600`), debes llamar a la shell_command `FILAMENT_NOTICE` con el ID del filamento:
 
 ```gcode
 RUN_SHELL_COMMAND CMD=FILAMENT_NOTICE PARAMS="{id}"
 ```
 
-Esta macro ejecutará `filamentNotice.py`, que:
+Esta shell_command ejecutará `filamentNotice.py`, que:
 1.  Consulta Spoolman para obtener el nombre y material del filamento.
 2.  Llama a la macro `_FILAMENT_INFO` en Klipper con los datos obtenidos.
 
