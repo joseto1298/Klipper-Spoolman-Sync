@@ -1,20 +1,64 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+#
+# Script: filamentList.py
+# Prop贸sito: Lee la configuraci贸n de 'config.ini' y sincroniza el uso de filamento
+# en Klipper/Moonraker con la base de datos de Spoolman.
+
 import sys
 import re
 import requests
 import os
+import configparser
 
-# URL base del servidor Spoolman
-SPOOLMAN_URL = "http://192.168.0.220:7912/api/v1/filament/"
+# --- CONFIGURACI脫N DE ARCHIVOS ---
 
-# Carpeta donde Klipper guarda los G-code
-GCODE_PATH = "/home/pi/printer_data/gcodes/"
+# Obtiene la ruta absoluta del directorio donde se est谩 ejecutando este script.
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Construye la ruta completa al archivo config.ini
+CONFIG_FILE = os.path.join(SCRIPT_DIR, "config.ini")
+
+# --- CARGA DE CONFIGURACI脫N ---
+
+def load_config():
+    """Carga y valida los par谩metros de configuraci贸n desde config.ini."""
+    config = configparser.ConfigParser()
+    
+    # Usa la ruta absoluta construida arriba (CONFIG_FILE)
+    if not os.path.exists(CONFIG_FILE):
+        # Si no lo encuentra, imprime la ruta que intent贸 usar
+        print(f"Error: Archivo de configuraci贸n '{CONFIG_FILE}' no encontrado.")
+        sys.exit(1)
+        
+    config.read(CONFIG_FILE)
+    
+    settings = {}
+    try:
+        settings["SPOOLMAN_URL"] = config.get("Spoolman", "SPOOLMAN_URL")
+        settings["GCODE_PATH"] = config.get("Klipper", "GCODE_PATH")
+        # settings["MOONRAKER_URL"] = config.get("Moonraker", "MOONRAKER_URL") 
+    except configparser.NoSectionError as e:
+        print(f"Error en config.ini: Falta una secci贸n o clave requerida: {e}")
+        sys.exit(1)
+    
+    return settings
+
+# Carga la configuraci贸n al inicio del script
+CONFIG = load_config()
+SPOOLMAN_URL = CONFIG["SPOOLMAN_URL"]
+GCODE_PATH = CONFIG["GCODE_PATH"]
+
+# --- FUNCIONES PRINCIPALES ---
 
 def get_filament_info(filament_id):
-    """Consulta la API de Spoolman y devuelve nombre y material."""
+    """
+    Consulta la API de Spoolman para obtener detalles de un filamento espec铆fico.
+    """
     try:
+        # Usa la URL cargada desde config.ini
         response = requests.get(f"{SPOOLMAN_URL}{filament_id}", timeout=5)
+        
         if response.status_code == 200:
             data = response.json()
             return {
@@ -23,49 +67,75 @@ def get_filament_info(filament_id):
                 "material": data.get("material", "Unknown")
             }
         else:
-            return {"id": filament_id, "name": "Unknown", "material": "Unknown"}
-    except Exception as e:
-        return {"id": filament_id, "name": "Error", "material": str(e)}
+            return {"id": filament_id, "name": "ID No Encontrado", "material": "Desconocido"}
+    
+    except requests.exceptions.RequestException as e:
+        return {"id": filament_id, "name": "Error de Conexi贸n", "material": str(e)}
 
 def parse_gcode(filepath):
     """
-    Busca todas las l韓eas con ASSERT_ACTIVE_FILAMENT ID=x
-    Devuelve la lista en orden de aparici髇.
+    Lee un archivo G-code, busca IDs de filamento (ASSERT_ACTIVE_FILAMENT ID=x)
+    y elimina IDs consecutivos iguales.
     """
-    cambios = []
+    
+    all_fids = []
+    
     try:
         with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
             for linea in f:
                 linea = linea.strip()
                 match_fil = re.search(r"ASSERT_ACTIVE_FILAMENT\s+ID=(\d+)", linea)
+                
                 if match_fil:
                     fid = int(match_fil.group(1))
-                    cambios.append(fid)
+                    all_fids.append(fid)
+
     except FileNotFoundError:
-        print(f"Error: archivo no encontrado -> {filepath}")
+        print(f"Error: archivo G-code no encontrado -> {filepath}")
         sys.exit(1)
-    return cambios
+        
+    # --- L贸gica de Desduplicaci贸n Consecutiva ---
+    unique_sequence = []
+    last_fid = None
+    
+    for fid in all_fids:
+        if fid != last_fid:
+            unique_sequence.append(fid)
+            last_fid = fid
+            
+    return unique_sequence
+
+# --- FUNCI脫N DE EJECUCI脫N PRINCIPAL ---
 
 def main():
+    """
+    Funci贸n principal que gestiona la entrada de argumentos y coordina el an谩lisis.
+    """
+    
     if len(sys.argv) < 2:
-        print("Uso: FilamentList.py <archivo.gcode>")
+        print("Uso: filamentList.py <archivo.gcode>")
         sys.exit(1)
 
     filename = sys.argv[1]
+    
+    # Usa GCODE_PATH cargada desde config.ini
     if not os.path.isabs(filename):
         filename = os.path.join(GCODE_PATH, filename)
 
     cambios = parse_gcode(filename)
+    
     if not cambios:
-        print("No se encontraron cambios de filamento.")
+        print("No se encontraron comandos ASSERT_ACTIVE_FILAMENT ni cambios de filamento.")
         sys.exit(0)
 
     print("Secuencia de filamentos detectada:")
+    print("-" * 35)
+    
     for i, fid in enumerate(cambios, start=1):
         info = get_filament_info(fid)
         print(f"  Cambio {i}: ID={fid} | Nombre={info['name']} | Material={info['material']}")
 
-    print("\nAn醠isis completado correctamente.")
+    print("\nAn谩lisis completado correctamente.")
 
 if __name__ == "__main__":
     main()
