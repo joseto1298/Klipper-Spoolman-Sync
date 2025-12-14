@@ -77,20 +77,21 @@ def get_filament_data(filament_id, spoolman_url):
 
 
 def send_filament_info(fid, name, material, moonraker_base_url):
-    """
-    Envía el comando FILAMENT_INFO a Klipper a través del endpoint de G-code de Moonraker.
-    """
-    
     MOONRAKER_GCODE_URL = f"{moonraker_base_url}printer/gcode/script"
-    
+
     safe_name = str(name).replace('"', "'")
     safe_material = str(material).replace('"', "'")
-    
-    # CRÍTICO: Usar un macro con '_' (ej. _FILAMENT_INFO) para macros internos.
+
     gcode = f'_FILAMENT_INFO ID={fid} NAME="{safe_name}" MATERIAL="{safe_material}"'
 
-    # Se envía el comando.
-    requests.post(MOONRAKER_GCODE_URL, json={"script": gcode})
+    try:
+        requests.post(
+            MOONRAKER_GCODE_URL,
+            json={"script": gcode},
+            timeout=5
+        )
+    except requests.exceptions.RequestException as e:
+        print(f"Moonraker POST failed: {e}")
 
 def main():
     # 1. Cargar las configuraciones
@@ -109,6 +110,7 @@ def main():
     send_filament_info(filament_id, name, material, MOONRAKER_BASE_URL)
 
     # Si llega hasta aquí, el script ha terminado con éxito.
+    print("FILAMENT_NOTICE finished")
     sys.exit(0) 
 
 
