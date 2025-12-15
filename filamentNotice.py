@@ -88,7 +88,6 @@ def send_filament_info(fid, name, material, moonraker_base_url):
         requests.post(
             MOONRAKER_GCODE_URL,
             json={"script": gcode},
-            timeout=5
         )
     except requests.exceptions.RequestException as e:
         print(f"Moonraker POST failed: {e}")
