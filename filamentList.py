@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-#
-# Script: filamentList.py
-# Propósito: Lee la configuración de 'config.ini' y sincroniza el uso de filamento
-# en Klipper/Moonraker con la base de datos de Spoolman.
 
 import sys
 import re
@@ -11,131 +7,111 @@ import requests
 import os
 import configparser
 
-# --- CONFIGURACIÓN DE ARCHIVOS ---
-
-# Obtiene la ruta absoluta del directorio donde se está ejecutando este script.
+# --- CARGA DE CONFIGURACIÓN ---
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-
-# Construye la ruta completa al archivo config.ini
 CONFIG_FILE = os.path.join(SCRIPT_DIR, "config.ini")
 
-# --- CARGA DE CONFIGURACIÓN ---
-
 def load_config():
-    """Carga y valida los parámetros de configuración desde config.ini."""
+    """Lee config.ini y normaliza las URLs y rutas."""
     config = configparser.ConfigParser()
-    
-    # Usa la ruta absoluta construida arriba (CONFIG_FILE)
     if not os.path.exists(CONFIG_FILE):
-        # Si no lo encuentra, imprime la ruta que intentó usar
-        print(f"Error: Archivo de configuración '{CONFIG_FILE}' no encontrado.")
+        print(f"Error: No se encontró '{CONFIG_FILE}'")
         sys.exit(1)
         
     config.read(CONFIG_FILE)
-    
-    settings = {}
     try:
-        settings["SPOOLMAN_URL"] = config.get("Spoolman", "SPOOLMAN_URL")
-        settings["GCODE_PATH"] = config.get("Klipper", "GCODE_PATH")
-        # settings["MOONRAKER_URL"] = config.get("Moonraker", "MOONRAKER_URL") 
-    except configparser.NoSectionError as e:
-        print(f"Error en config.ini: Falta una sección o clave requerida: {e}")
+        # Normalizamos URLs y rutas para que siempre terminen en /
+        spool_url = config.get("Spoolman", "SPOOLMAN_URL").rstrip('/') + '/'
+        gcode_path = config.get("Klipper", "GCODE_PATH").rstrip('/') + '/'
+        return spool_url, gcode_path
+    except Exception as e:
+        print(f"Error en las claves de config.ini: {e}")
         sys.exit(1)
-    
-    return settings
 
-# Carga la configuración al inicio del script
-CONFIG = load_config()
-SPOOLMAN_URL = CONFIG["SPOOLMAN_URL"]
-GCODE_PATH = CONFIG["GCODE_PATH"]
-
-# --- FUNCIONES PRINCIPALES ---
+# Variables globales de configuración
+SPOOLMAN_URL, GCODE_PATH = load_config()
 
 def get_filament_info(filament_id):
-    """
-    Consulta la API de Spoolman para obtener detalles de un filamento específico.
-    """
+    """Consulta detalles del filamento en Spoolman."""
     try:
-        # Usa la URL cargada desde config.ini
-        response = requests.get(f"{SPOOLMAN_URL}{filament_id}", timeout=5)
-        
+        url = f"{SPOOLMAN_URL}{filament_id}"
+        # Si por alguna razón la URL no tiene la palabra filament, la añadimos
+        if "/filament/" not in url:
+            url = f"{SPOOLMAN_URL}filament/{filament_id}"
+            
+        response = requests.get(url, timeout=5)
         if response.status_code == 200:
             data = response.json()
-            return {
-                "id": filament_id,
-                "name": data.get("name", "Unknown"),
-                "material": data.get("material", "Unknown")
-            }
-        else:
-            return {"id": filament_id, "name": "ID No Encontrado", "material": "Desconocido"}
-    
-    except requests.exceptions.RequestException as e:
-        return {"id": filament_id, "name": "Error de Conexión", "material": str(e)}
+            vendor = data.get("vendor", {}).get("name", "")
+            name = data.get("name", "Desconocido")
+            mat = data.get("material", "N/A")
+            
+            full_name = f"{vendor} {name}".strip()
+            return {"name": full_name, "material": mat}
+        return {"name": f"ID {filament_id} no encontrado", "material": "?"}
+    except:
+        return {"name": "Error de conexión", "material": "Error"}
 
 def parse_gcode(filepath):
-    """
-    Lee un archivo G-code, busca IDs de filamento (ASSERT_ACTIVE_FILAMENT ID=x)
-    y elimina IDs consecutivos iguales.
-    """
-    
-    all_fids = []
-    
+    """Escanea el archivo buscando comandos ASSERT_ACTIVE_FILAMENT."""
+    # Validación crucial para evitar el Errno 21 (IsADirectoryError)
+    if os.path.isdir(filepath):
+        print(f"ERROR: '{filepath}' es una carpeta, no un archivo G-code.")
+        return []
+
+    fids = []
     try:
         with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
-            for linea in f:
-                linea = linea.strip()
-                match_fil = re.search(r"ASSERT_ACTIVE_FILAMENT\s+ID=(\d+)", linea)
-                
-                if match_fil:
-                    fid = int(match_fil.group(1))
-                    all_fids.append(fid)
+            for line in f:
+                # Buscamos la etiqueta de filamento
+                match = re.search(r"ASSERT_ACTIVE_FILAMENT\s+ID=(\d+)", line)
+                if match:
+                    fids.append(int(match.group(1)))
+    except Exception as e:
+        print(f"Error al leer el archivo: {e}")
+        return []
 
-    except FileNotFoundError:
-        print(f"Error: archivo G-code no encontrado -> {filepath}")
-        sys.exit(1)
-        
-    # --- Lógica de Desduplicación Consecutiva ---
-    unique_sequence = []
-    last_fid = None
-    
-    for fid in all_fids:
-        if fid != last_fid:
-            unique_sequence.append(fid)
-            last_fid = fid
-            
-    return unique_sequence
-
-# --- FUNCIÓN DE EJECUCIÓN PRINCIPAL ---
+    # Eliminar duplicados consecutivos (1, 1, 2 -> 1, 2)
+    secuencia_unica = []
+    ultimo_id = None
+    for fid in fids:
+        if fid != ultimo_id:
+            secuencia_unica.append(fid)
+            ultimo_id = fid
+    return secuencia_unica
 
 def main():
-    """
-    Función principal que gestiona la entrada de argumentos y coordina el análisis.
-    """
-    
     if len(sys.argv) < 2:
-        print("Uso: filamentList.py <archivo.gcode>")
+        print("Uso: filamentList.py <nombre_archivo_o_ruta>")
         sys.exit(1)
 
-    filename = sys.argv[1]
-    
-    # Usa GCODE_PATH cargada desde config.ini
-    if not os.path.isabs(filename):
-        filename = os.path.join(GCODE_PATH, filename)
+    # Capturamos el argumento de Klipper (limpiamos comillas si las hay)
+    entrada = sys.argv[1].strip().replace('"', '').replace("'", "")
 
-    cambios = parse_gcode(filename)
-    
-    if not cambios:
-        print("No se encontraron comandos ASSERT_ACTIVE_FILAMENT ni cambios de filamento.")
-        sys.exit(0)
+    # LÓGICA DE RUTA INTELIGENTE:
+    # Si la entrada ya es una ruta absoluta (empieza por /), la usamos.
+    # Si no, la concatenamos con el GCODE_PATH del config.ini.
+    if os.path.isabs(entrada):
+        filepath = entrada
+    else:
+        filepath = os.path.join(GCODE_PATH, entrada)
 
-    print("Secuencia de filamentos detectada:")
-    print("-" * 35)
+    print(f"\n📂 Archivo: {os.path.basename(filepath)}")
+    print(f"📍 Ruta: {filepath}")
     
-    for i, fid in enumerate(cambios, start=1):
+    secuencia = parse_gcode(filepath)
+    
+    if not secuencia:
+        print("ℹ️  No se detectaron comandos de filamento en este archivo.")
+        return
+
+    print("\n🧵 SECUENCIA DE FILAMENTOS DETECTADA")
+    print("=" * 50)
+    for i, fid in enumerate(secuencia, start=1):
         info = get_filament_info(fid)
-        print(f"  Cambio {i}: ID={fid} | Nombre={info['name']} | Material={info['material']}")
-
-    print("\nAnálisis completado correctamente.")
+        print(f" {i}. [ID {fid:3}] -> {info['name']} ({info['material']})")
+    print("=" * 50)
+    print("✅ Análisis finalizado.\n")
 
 if __name__ == "__main__":
     main()
