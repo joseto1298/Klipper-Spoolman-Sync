@@ -67,22 +67,24 @@ def get_filament_data(filament_id, spoolman_url):
         
         name = data.get("name", "Unknown")
         material = data.get("material", "Unknown")
-        return name, material
+        vendor_name = data.get("vendor", {}).get("name", "Unknown")
+        return name, material, vendor
         
     except requests.exceptions.RequestException as e:
         # Si la consulta falla, imprime el error y devuelve valores por defecto, 
         # pero permite continuar a Moonraker para que el error sea manejado por Klipper.
         print(f"Error al obtener filamento {filament_id} de Spoolman: {e}")
-        return "Unknown", "Unknown"
+        return "Unknown", "Unknown", "Unknown"
 
 
-def send_filament_info(fid, name, material, moonraker_base_url):
+def send_filament_info(fid, name, material, vendor, moonraker_base_url):
     MOONRAKER_GCODE_URL = f"{moonraker_base_url}printer/gcode/script"
 
     safe_name = str(name).replace('"', "'")
     safe_material = str(material).replace('"', "'")
+    safe_vendor = str(vendor).replace('"', "'")
 
-    gcode = f'_FILAMENT_INFO ID={fid} NAME="{safe_name}" MATERIAL="{safe_material}"'
+    gcode = f'_FILAMENT_INFO ID={fid} NAME="{safe_name}" MATERIAL="{safe_material}" MATERIAL="{safe_vendor}"'
 
     try:
         requests.post(
@@ -103,15 +105,14 @@ def main():
     filament_id = sys.argv[1]
     
     # 2. Obtener la información del filamento
-    name, material = get_filament_data(filament_id, SPOOLMAN_URL)
+    name, material, vendor = get_filament_data(filament_id, SPOOLMAN_URL)
 
     # 3. Enviar la información a Klipper
-    send_filament_info(filament_id, name, material, MOONRAKER_BASE_URL)
+    send_filament_info(filament_id, name, material, vendor, MOONRAKER_BASE_URL)
 
     # Si llega hasta aquí, el script ha terminado con éxito.
     print("FILAMENT_NOTICE finished")
     sys.exit(0) 
-
 
 if __name__ == "__main__":
     main()
