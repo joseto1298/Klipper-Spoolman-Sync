@@ -90,7 +90,6 @@ def send_filament_info(fid, name, material, vendor_name, moonraker_base_url):
         requests.post(
             MOONRAKER_GCODE_URL,
             json={"script": gcode},
-            timeout=5
         )
 
         print(f"SUCCESS: Datos del filamento enviados a Klipper correctamente.")
