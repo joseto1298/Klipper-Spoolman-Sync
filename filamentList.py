@@ -58,13 +58,13 @@ def main():
     ids, secuencia = parse_gcode(filepath)
 
     print(f"\n📦 RESUMEN DE MATERIALES REQUERIDOS")
-    print("-" * 75)
+    print("-" * 25)
     print(f"{'ID':<6} {'FILAMENTO'}")
-    print("-" * 75)
+    print("-" * 25)
     for fid in ids:
         print(f"[{fid:^4}] {get_filament_info(fid)}")
     
-    print("-" * 75)
+    print("-" * 25)
     print(f"🔄 TOTAL CAMBIOS DE FILAMENTO: {len(secuencia) - 1}")
     print(f"✅ Análisis finalizado.\n")
 
