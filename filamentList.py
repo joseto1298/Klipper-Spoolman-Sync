@@ -1,62 +1,72 @@
-def parse_gcode(filepath):
-    """Escanea el archivo buscando ID de Spoolman, Capa y Altura Z."""
-    if os.path.isdir(filepath):
-        print(f"ERROR: '{filepath}' es una carpeta.")
-        return []
+import re, os, sys, configparser, requests
 
-    secuencia = []
-    capa_actual = 0
-    z_actual = 0.0
-    
+# --- CONFIGURACIÓN ---
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+CONFIG_PATH = os.path.join(BASE_DIR, "config.ini")
+
+def load_config():
+    config = configparser.ConfigParser()
+    config.read(CONFIG_PATH)
     try:
-        with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
-            for line in f:
-                # 1. Detectar Capa
-                layer_match = re.search(r"SET_PRINT_STATS_INFO\s+CURRENT_LAYER=(\d+)", line)
-                if layer_match:
-                    capa_actual = int(layer_match.group(1))
+        return config.get("Spoolman", "SPOOLMAN_URL"), config.get("Klipper", "GCODE_PATH")
+    except:
+        return None, "/home/pi/printer_data/gcodes/"
 
-                # 2. Detectar Altura Z (buscando _PLR_Z o G1 Z)
-                z_match = re.search(r"(?:_PLR_Z Z=|G1 Z)(\d+\.?\d*)", line)
-                if z_match:
-                    z_actual = float(z_match.group(1))
+SPOOLMAN_URL, GCODE_PATH = load_config()
 
-                # 3. Detectar ID de Filamento
-                match = re.search(r"ASSERT_ACTIVE_FILAMENT\s+ID=(\d+)", line)
-                if match:
-                    fid = int(match.group(1))
-                    
-                    # Guardamos el evento con toda la información
-                    secuencia.append({
-                        "id": fid, 
-                        "layer": capa_actual,
-                        "z_height": z_actual
-                    })
-                    
-    except Exception as e:
-        print(f"Error al leer el archivo: {e}")
-        return []
+def get_filament_info(fid):
+    try:
+        # Usamos la URL que confirmaste que funciona
+        url = f"{SPOOLMAN_URL}{fid}"
+        r = requests.get(url, timeout=3)
+        if r.status_code == 200:
+            d = r.json()
+            vendor = d.get("vendor", {}).get("name", "") if d.get("vendor") else ""
+            return f"{vendor} {d.get('name', '???')} ({d.get('material', '???')})".strip()
+    except: pass
+    return f"ID {fid} (Desconocido)"
 
-    return secuencia
+def parse_gcode(filepath):
+    # Usamos un set para obtener IDs únicos y una lista para la secuencia
+    ids_unicos = []
+    secuencia_detallada = []
+    ultimo_id = None
+
+    with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
+        for line in f:
+            match = re.search(r"ASSERT_ACTIVE_FILAMENT\s+ID=(\d+)", line)
+            if match:
+                fid = int(match.group(1))
+                if fid not in ids_unicos:
+                    ids_unicos.append(fid)
+                
+                # Para la secuencia, solo guardamos si realmente cambia el ID
+                if fid != ultimo_id:
+                    secuencia_detallada.append(fid)
+                    ultimo_id = fid
+    return ids_unicos, secuencia_detallada
 
 def main():
-    # ... (resto del código de inicialización igual) ...
-    
-    secuencia = parse_gcode(filepath)
-    
-    if not secuencia:
-        print("ℹ️  No se detectaron comandos de filamento en este archivo.")
+    if len(sys.argv) < 2: return
+    filename = sys.argv[1].replace('"', '')
+    filepath = os.path.join(GCODE_PATH, filename) if not os.path.isabs(filename) else filename
+
+    if not os.path.exists(filepath):
+        print(f"❌ No existe: {filepath}")
         return
 
-    print("\n🧵 SECUENCIA DE FILAMENTOS POR ALTURA")
+    ids, secuencia = parse_gcode(filepath)
+
+    print(f"\n📦 RESUMEN DE MATERIALES REQUERIDOS")
     print("-" * 75)
-    print(f"{'#':<3} {'CAPA':<8} {'ALTURA Z':<12} {'ID':<6} {'INFO FILAMENTO'}")
+    print(f"{'ID':<6} {'FILAMENTO'}")
     print("-" * 75)
+    for fid in ids:
+        print(f"[{fid:^4}] {get_filament_info(fid)}")
     
-    for i, evento in enumerate(secuencia, start=1):
-        info = get_filament_info(evento['id'])
-        z_str = f"{evento['z_height']:.2f} mm"
-        print(f"{i:<3} {evento['layer']:<8} {z_str:<12} [{evento['id']:^4}] {info['name']} ({info['material']})")
-    
     print("-" * 75)
-    print("✅ Análisis finalizado.\n")
+    print(f"🔄 TOTAL CAMBIOS DE FILAMENTO: {len(secuencia) - 1}")
+    print(f"✅ Análisis finalizado.\n")
+
+if __name__ == "__main__":
+    main()
