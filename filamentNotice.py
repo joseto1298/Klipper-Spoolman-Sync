@@ -1,48 +1,39 @@
-#!/home/pi/klipper_filament/venv/bin/python3
+#!/home/pi/Klipper-Spoolman-Sync/venv/bin/python3
 # -*- coding: utf-8 -*-
 
 """
 Script: filamentNotice.py
 Función: Consulta Spoolman para obtener información de un filamento y
          envía esta información como un comando G-code a Klipper a través de Moonraker.
+Incluye caché local para evitar consultas repetidas a Spoolman.
 """
 
 import sys
 import requests
 import os
 import configparser
+import json
 
 # --- CONFIGURACIÓN Y CARGA ---
-# Nombre del archivo de configuración.
 CONFIG_FILE = 'config.ini'
-# Tiempo de espera máximo para las peticiones de red (ajustado para mayor fiabilidad).
-NETWORK_TIMEOUT = 15 
+NETWORK_TIMEOUT = 15
+CACHE_FILE = 'filament_cache.json'
 
 def load_config():
-    """
-    Carga y valida las configuraciones necesarias desde config.ini.
-    Busca config.ini en el directorio donde reside el script.
-    """
     config = configparser.ConfigParser()
-    
-    # 1. Determinar la ruta absoluta del archivo de configuración
     script_dir = os.path.dirname(os.path.abspath(__file__))
     config_path = os.path.join(script_dir, CONFIG_FILE)
     
-    # 2. Verificar existencia y leer
     if not os.path.exists(config_path):
         print(f"Error: El archivo de configuración '{config_path}' no se encontró.")
-        sys.exit(1) # CRÍTICO: Sale con error si el archivo no existe.
+        sys.exit(1)
         
     config.read(config_path)
     
     try:
-        # Extrae las URLs necesarias
         spoolman_url = config['Spoolman']['SPOOLMAN_URL']
-        # Corregido: Uso de MOONRAKER_URL tal como está en el .ini
-        moonraker_base_url = config['Moonraker']['MOONRAKER_URL'] 
+        moonraker_base_url = config['Moonraker']['MOONRAKER_URL']
         
-        # Asegurar que la URL base de Moonraker termina en /
         if not moonraker_base_url.endswith('/'):
             moonraker_base_url += '/'
             
@@ -50,29 +41,55 @@ def load_config():
         
     except KeyError as e:
         print(f"Error en el archivo de configuración: Falta la clave o sección {e}.")
-        sys.exit(1) # CRÍTICO: Sale con error si la configuración es incorrecta.
+        sys.exit(1)
+
+
+def get_cache_path():
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(script_dir, CACHE_FILE)
+
+
+def load_cache():
+    cache_path = get_cache_path()
+    if os.path.exists(cache_path):
+        try:
+            with open(cache_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except:
+            return {}
+    return {}
+
+
+def save_cache(cache):
+    cache_path = get_cache_path()
+    with open(cache_path, 'w', encoding='utf-8') as f:
+        json.dump(cache, f, ensure_ascii=False, indent=2)
 
 
 def get_filament_data(filament_id, spoolman_url):
-    """
-    Obtiene el nombre y material de un filamento desde Spoolman.
-    """
+    cache = load_cache()
+    str_id = str(filament_id)
+
+    if str_id in cache:
+        data = cache[str_id]
+        return data.get("name", "Unknown"), data.get("material", "Unknown"), data.get("vendor", "Unknown")
+
     try:
-        # La URL de Spoolman debería tener el formato base (ej. http://ip:port/api/v1/filament)
-        url = f"{spoolman_url}{filament_id}" 
-        # Aumentamos el timeout para evitar fallos por red lenta.
+        url = f"{spoolman_url}{filament_id}"
         resp = requests.get(url, timeout=NETWORK_TIMEOUT)
-        resp.raise_for_status() # Lanza un error si el código HTTP es 4xx o 5xx.
+        resp.raise_for_status()
         data = resp.json()
         
         name = data.get("name", "Unknown")
         material = data.get("material", "Unknown")
         vendor_name = data.get("vendor", {}).get("name", "Unknown")
+
+        cache[str_id] = {"name": name, "material": material, "vendor": vendor_name}
+        save_cache(cache)
+        
         return name, material, vendor_name
         
     except requests.exceptions.RequestException as e:
-        # Si la consulta falla, imprime el error y devuelve valores por defecto, 
-        # pero permite continuar a Moonraker para que el error sea manejado por Klipper.
         print(f"Error al obtener filamento {filament_id} de Spoolman: {e}")
         return "Unknown", "Unknown", "Unknown"
 
@@ -91,14 +108,11 @@ def send_filament_info(fid, name, material, vendor_name, moonraker_base_url):
             MOONRAKER_GCODE_URL,
             json={"script": gcode},
         )
-
         print(f"SUCCESS: Datos del filamento enviados a Klipper correctamente.")
-
     except requests.exceptions.RequestException as e:
         print(f"Moonraker POST failed: {e}")
 
 def main():
-    # 1. Cargar las configuraciones
     SPOOLMAN_URL, MOONRAKER_BASE_URL = load_config()
 
     if len(sys.argv) < 2:
@@ -107,13 +121,9 @@ def main():
 
     filament_id = sys.argv[1]
     
-    # 2. Obtener la información del filamento
     name, material, vendor_name = get_filament_data(filament_id, SPOOLMAN_URL)
-
-    # 3. Enviar la información a Klipper
     send_filament_info(filament_id, name, material, vendor_name, MOONRAKER_BASE_URL)
 
-    # Si llega hasta aquí, el script ha terminado con éxito.
     print("FILAMENT_NOTICE finished")
     sys.exit(0) 
 
